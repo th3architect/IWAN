@@ -1,7 +1,8 @@
 #! /usr/bin/python
 
 #import Router from Router
-import hashlib
+#import hashlib
+import os
 
 # boolean
 false = 0
@@ -21,7 +22,7 @@ passive = 2
 eigrp = 1
 bgp = 1
 
-
+cfgFileDirectory = "../iwan-cfg-files"
 
 eigrpName = "IWAN-EIGRP"
 eigrpAs = 400
@@ -148,7 +149,7 @@ class Router:
         self.tunnelIntfs = [ ] # overlay interfaces
         self.name = name
         self.stub = stub
-        self.CfgFileName = name + "Cfg.txt"
+        self.CfgFileName = cfgFileDirectory + "/" + name + "Cfg.txt"
         self.routeProt = routeProt
 
     def getTunnelIntf(self, intf):
@@ -357,6 +358,9 @@ intfNone = Router.Intf("None", None, None, None, None, None,
 def main():
 
     Routers = [ ]
+
+    if (os.path.exists(cfgFileDirectory) == False):
+        os.mkdir(cfgFileDirectory)
 
     # Enteprise Routers
 
