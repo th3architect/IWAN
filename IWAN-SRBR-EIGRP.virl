@@ -1,0 +1,2394 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<topology xmlns="http://www.cisco.com/VIRL" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" schemaVersion="0.8" xsi:schemaLocation="http://www.cisco.com/VIRL https://raw.github.com/CiscoVIRL/schema/v0.8/virl.xsd">
+    <extensions>
+        <entry key="AutoNetkit.ipv4_loopback_subnet" type="String">192.168.0.0</entry>
+        <entry key="management_network" type="String">flat</entry>
+    </extensions>
+    <node name="DIST" type="SIMPLE" subtype="IOSv" location="58,194" coordinate="48.80686346108517,-121.8603515625" vmImage="IOSv" vmFlavor="IOSv" ipv4="192.168.0.10">
+        <extensions>
+            <entry key="static_ip" type="String">172.16.1.11</entry>
+            <entry key="AutoNetkit.ibgp_role" type="String">Disabled</entry>
+            <entry key="AutoNetkit.mgmt_ip" type="string"></entry>
+            <entry key="AutoNetkit.ospf_area" type="String">0</entry>
+            <entry key="Auto-generate config" type="Boolean">false</entry>
+            <entry key="config" type="String">!---------------------------------------------
+! DIST
+!---------------------------------------------
+! 
+!
+service timestamps debug datetime msec
+service timestamps log datetime msec
+no service password-encryption
+!
+hostname DIST
+!
+!
+enable password cisco
+!
+no aaa new-model
+!
+!
+no ip domain lookup
+ip cef
+ipv6 unicast-routing
+ipv6 cef
+!
+line vty 0 4
+ transport input ssh telnet
+ exec-timeout 720 0
+ password cisco
+ login
+
+username cisco privilege 15 password 0 cisco
+ !
+ onep
+ transport type tls disable-remotecert-validation
+  start
+ service set vty
+!
+!
+!--------------------------------------------------------------------
+! LIVEACTION FLEXIBLE NETFLOW
+!--------------------------------------------------------------------
+!
+flow record LIVEACTION-FLOWRECORD
+ description DO NOT MODIFY. USED BY LIVEACTION.
+ match ipv4 tos
+ match ipv4 protocol
+ match ipv4 source address
+ match ipv4 destination address
+ match transport source-port
+ match transport destination-port
+ match interface input
+ match flow direction
+ collect routing source as
+ collect routing destination as
+ collect routing next-hop address ipv4
+ collect ipv4 dscp
+ collect ipv4 id
+ collect ipv4 source prefix
+ collect ipv4 source mask
+ collect ipv4 destination mask
+ collect transport tcp flags
+ collect interface output
+ collect flow sampler
+ collect counter bytes
+ collect counter packets
+ collect timestamp sys-uptime first
+ collect timestamp sys-uptime last
+ collect application name
+!
+flow exporter LIVEACTION-FLOWEXPORTER
+ description DO NOT MODIFY. USED BY LIVEACTION.
+ destination 10.151.1.95
+ source Loopback0
+ transport udp 2055
+ option interface-table
+ option application-table
+!
+flow monitor LIVEACTION-FLOWMONITOR
+ description DO NOT MODIFY. USED BY LIVEACTION.
+ exporter LIVEACTION-FLOWEXPORTER
+ cache timeout inactive 10
+ cache timeout active 60
+ record LIVEACTION-FLOWRECORD
+!
+!
+!--------------------------------------------------------------------
+! FLEXIBLE NETFLOW 
+!--------------------------------------------------------------------
+!
+flow record RECORD-STATS
+ match ipv4 dscp
+ match ipv4 protocol
+ match ipv4 source address
+ match ipv4 destination address
+ match transport source-port
+ match transport destination-port
+ match interface input
+ match flow direction
+ collect routing next-hop address ipv4
+ collect counter bytes
+!
+!
+flow monitor MONITOR-STATS
+ cache timeout inactive 60
+ cache timeout active 60
+ cache timeout update 1
+ record RECORD-STATS
+!
+!
+!
+!--------------------------------------------------------------------
+! QOS MARKING 
+!--------------------------------------------------------------------
+!
+class-map match-all MARKING-CRITICAL
+ match access-group name MARKING-CRITICAL
+!
+policy-map MARKING
+ class MARKING-CRITICAL
+  set ip dscp af31
+!
+!
+!
+!--------------------------------------------------------------------
+! Interfaces
+!--------------------------------------------------------------------
+!
+interface Loopback0
+ ip address 10.8.2.2 255.255.255.255
+!
+interface GigabitEthernet0/0
+ description OOB Management
+ ip address 10.11.12.4 255.255.255.0
+ duplex auto
+ speed auto
+ media-type rj45
+!
+interface GigabitEthernet0/1
+ description to SRVR
+ mac-address aabb.cc00.2200
+ ip address 10.8.12.2 255.255.255.0
+ service-policy input MARKING
+ duplex auto
+ speed auto
+ media-type rj45
+!
+interface GigabitEthernet0/2
+ description to BRPoPmpls
+ ip address 10.8.24.2 255.255.255.0
+ ip flow monitor MONITOR-STATS input
+ ip flow monitor MONITOR-STATS output
+ duplex auto
+ speed auto
+ media-type rj45
+!
+interface GigabitEthernet0/3
+ description to BRPoPinet
+ ip address 10.8.25.2 255.255.255.0
+ ip flow monitor MONITOR-STATS input
+ ip flow monitor MONITOR-STATS output
+ duplex auto
+ speed auto
+ media-type rj45
+!
+interface GigabitEthernet0/4
+ description to MC
+ ip address 10.8.23.2 255.255.255.0
+ duplex auto
+ speed auto
+ media-type rj45
+!
+!
+!--------------------------------------------------------------------
+! EIGRP
+!--------------------------------------------------------------------
+!
+router eigrp IWAN-EIGRP
+ address-family ipv4 unicast autonomous-system 400
+   network 10.8.25.0 0.0.0.255
+   network 10.8.24.0 0.0.0.255
+   network 10.8.2.2 0.0.0.0
+   network 10.8.12.0 0.0.0.255
+   network 10.8.23.0 0.0.0.255
+!
+!
+!--------------------------------------------------------------------
+! DSCP MARKING FOR CRITICAL APPS 
+!--------------------------------------------------------------------
+!
+ip access-list extended MARKING-CRITICAL
+ permit tcp any eq 7000 any
+!
+!
+ip sla responder
+!
+!
+!
+!--------------------------------------------------------------------
+! ALIAS 
+!--------------------------------------------------------------------
+!
+alias exec sri show run | inc
+alias exec srb show run | beg
+alias exec shflow sh flow monitor MONITOR-STATS cache format table
+!
+!
+!--------------------------------------------------------------------
+!
+ntp server 10.8.3.3
+!
+!
+!
+!
+!--------------------------------------------------------------------
+!
+snmp-server community public RO
+snmp-server community private RW
+!
+no ip http server
+no ip http secure-server
+!
+!
+!
+!
+control-plane
+!
+banner exec `
+**************************************************************************
+* IOSv - Cisco Systems Confidential                                      *
+*                                                                        *
+* This software is provided as is without warranty for internal          *
+* development and testing purposes only under the terms of the Cisco     *
+* Early Field Trial agreement.  Under no circumstances may this software *
+* be used for production purposes or deployed in a production            *
+* environment.                                                           *
+*                                                                        *
+* By using the software, you agree to abide by the terms and conditions  *
+* of the Cisco Early Field Trial Agreement as well as the terms and      *
+* conditions of the Cisco End User License Agreement at                  *
+* http://www.cisco.com/go/eula                                           *
+*                                                                        *
+* Unauthorized use or distribution of this software is expressly         *
+* Prohibited.                                                            *
+**************************************************************************`
+banner incoming `
+**************************************************************************
+* IOSv - Cisco Systems Confidential                                      *
+*                                                                        *
+* This software is provided as is without warranty for internal          *
+* development and testing purposes only under the terms of the Cisco     *
+* Early Field Trial agreement.  Under no circumstances may this software *
+* be used for production purposes or deployed in a production            *
+* environment.                                                           *
+*                                                                        *
+* By using the software, you agree to abide by the terms and conditions  *
+* of the Cisco Early Field Trial Agreement as well as the terms and      *
+* conditions of the Cisco End User License Agreement at                  *
+* http://www.cisco.com/go/eula                                           *
+*                                                                        *
+* Unauthorized use or distribution of this software is expressly         *
+* Prohibited.                                                            *
+**************************************************************************`
+banner login `
+**************************************************************************
+* IOSv - Cisco Systems Confidential                                      *
+*                                                                        *
+* This software is provided as is without warranty for internal          *
+* development and testing purposes only under the terms of the Cisco     *
+* Early Field Trial agreement.  Under no circumstances may this software *
+* be used for production purposes or deployed in a production            *
+* environment.                                                           *
+*                                                                        *
+* By using the software, you agree to abide by the terms and conditions  *
+* of the Cisco Early Field Trial Agreement as well as the terms and      *
+* conditions of the Cisco End User License Agreement at                  *
+* http://www.cisco.com/go/eula                                           *
+*                                                                        *
+* Unauthorized use or distribution of this software is expressly         *
+* Prohibited.                                                            *
+**************************************************************************`
+!
+line con 0
+ password cisco
+line aux 0
+!
+no scheduler allocate
+!
+end</entry>
+        </extensions>
+        <interface id="0" name="GigabitEthernet0/1" ipv4="10.0.0.46" netPrefixLenV4="30"/>
+        <interface id="1" name="GigabitEthernet0/2" ipv4="10.0.0.49" netPrefixLenV4="30"/>
+        <interface id="2" name="GigabitEthernet0/3" ipv4="10.0.0.53" netPrefixLenV4="30"/>
+        <interface id="3" name="GigabitEthernet0/4" ipv4="10.0.0.38" netPrefixLenV4="30"/>
+    </node>
+    <node name="BRPoPmpls" type="SIMPLE" subtype="IOSv" location="210,133" coordinate="50.54136296522161,-115.1806640625" vmImage="IOSv" vmFlavor="IOSv" ipv4="192.168.0.18">
+        <extensions>
+            <entry key="static_ip" type="String">172.16.1.14</entry>
+            <entry key="AutoNetkit.mgmt_ip" type="string"></entry>
+            <entry key="AutoNetkit.ASN" type="Integer">10</entry>
+            <entry key="AutoNetkit.ospf_area" type="String">0</entry>
+            <entry key="Auto-generate config" type="Boolean">false</entry>
+            <entry key="AutoNetkit.ibgp_role" type="String">RRC</entry>
+            <entry key="config" type="String">!------------------------------------------------------------
+! IWAN POP BR connected to MPLS
+! HUB BR on MPLS
+!------------------------------------------------------------
+!
+hostname BRPoPmpls
+!
+no aaa new-model
+clock timezone CET 1 0
+no ip domain lookup
+ip cef
+ipv6 unicast-routing
+ipv6 cef
+!
+! no platform specific addresses or things in this config
+enable password cisco
+line vty 0 4
+ transport input ssh telnet
+ exec-timeout 720 0
+ password cisco
+ login
+
+username cisco privilege 15 password 0 cisco
+ !
+ onep
+ transport type tls disable-remotecert-validation
+  start
+ service set vty
+!
+!------------------------------------------------------------
+! USERS
+!------------------------------------------------------------
+!
+!
+!
+!
+!------------------------------------------------------------
+! FRONT VRF
+!------------------------------------------------------------
+!
+vrf definition IWAN-TRANSPORT-1
+ !
+ address-family ipv4
+ exit-address-family
+!
+!
+!------------------------------------------------------------
+! DOMAIN
+!------------------------------------------------------------
+!
+!
+domain IWAN
+ vrf default
+  border
+   source-interface Loopback0
+   master 10.8.9.9
+!
+!
+!--------------------------------------------------------------------
+! LIVEACTION FLEXIBLE NETFLOW
+!--------------------------------------------------------------------
+!
+flow record LIVEACTION-FLOWRECORD
+ description DO NOT MODIFY. USED BY LIVEACTION.
+ match ipv4 tos
+ match ipv4 protocol
+ match ipv4 source address
+ match ipv4 destination address
+ match transport source-port
+ match transport destination-port
+ match interface input
+ match flow direction
+ collect routing source as
+ collect routing destination as
+ collect routing next-hop address ipv4
+ collect ipv4 dscp
+ collect ipv4 id
+ collect ipv4 source prefix
+ collect ipv4 source mask
+ collect ipv4 destination mask
+ collect transport tcp flags
+ collect interface output
+ collect flow sampler
+ collect counter bytes
+ collect counter packets
+ collect timestamp sys-uptime first
+ collect timestamp sys-uptime last
+ collect application name
+!
+flow exporter LIVEACTION-FLOWEXPORTER
+ description DO NOT MODIFY. USED BY LIVEACTION.
+ destination 10.151.1.95
+ source Loopback0
+ transport udp 2055
+ option interface-table
+ option application-table
+!
+flow monitor LIVEACTION-FLOWMONITOR
+ description DO NOT MODIFY. USED BY LIVEACTION.
+ exporter LIVEACTION-FLOWEXPORTER
+ cache timeout inactive 10
+ cache timeout active 60
+ record LIVEACTION-FLOWRECORD
+!
+!
+!------------------------------------------------------------
+! FLEXIBLE NETFLOW
+!------------------------------------------------------------
+!
+flow record RECORD-STATS
+ match ipv4 dscp
+ match ipv4 protocol
+ match ipv4 source address
+ match ipv4 destination address
+ match transport source-port
+ match transport destination-port
+ match interface input
+ match flow direction
+ collect routing next-hop address ipv4
+ collect counter bytes
+!
+flow monitor MONITOR-STATS
+ cache timeout inactive 60
+ cache timeout active 60
+ cache timeout update 1
+ record RECORD-STATS
+!
+!
+!
+!
+!
+!
+!------------------------------------------------------------
+! KEYRING 
+! Use pre-share key here
+!------------------------------------------------------------
+!
+crypto ikev2 keyring DMVPN-KEYRING-1
+ peer ANY
+  address 0.0.0.0 0.0.0.0
+  pre-shared-key c1sco123
+ !
+!
+!
+!------------------------------------------------------------
+! IKEv2 PROPOSAL
+!
+! Removed IKEv2 proposal, will use smart default
+!------------------------------------------------------------
+!
+!
+!------------------------------------------------------------
+! IKEv2 PROFILE
+!------------------------------------------------------------
+!
+crypto ikev2 profile FVRF-IKEv2-IWAN-TRANSPORT-1
+ match fvrf IWAN-TRANSPORT-1
+ match identity remote address 0.0.0.0
+ authentication remote pre-share
+ authentication local pre-share
+ keyring local DMVPN-KEYRING-1
+!
+!
+!
+!------------------------------------------------------------
+! IPSEC
+!------------------------------------------------------------
+!
+! To avoid %CRYPTO-4-PKT_REPLAY_ERR
+crypto ipsec security-association replay disable
+crypto ipsec security-association replay window-size 512
+!
+!
+crypto ipsec transform-set AES256/SHA/TRANSPORT esp-aes 256 esp-sha-hmac
+ mode transport
+!
+crypto ipsec profile DMVPN-PROFILE-1
+ set transform-set AES256/SHA/TRANSPORT
+ set ikev2-profile FVRF-IKEv2-IWAN-TRANSPORT-1
+!
+!
+!
+!
+!--------------------------------------------------------------------
+! LOOPBACK
+!--------------------------------------------------------------------
+!
+interface Loopback0
+ ip address 10.8.4.4 255.255.255.255
+!
+!
+!
+!!------------------------------------------------------------
+! DMVPN TUNNEL
+!------------------------------------------------------------
+!
+interface Tunnel100
+ bandwidth 1000
+ ip address 10.0.100.84 255.255.255.0
+ no ip redirects
+ ip mtu 1400
+ ip flow monitor MONITOR-STATS input
+ ip flow monitor MONITOR-STATS output
+ ip flow monitor LIVEACTION-FLOWMONITOR input
+ ip flow monitor LIVEACTION-FLOWMONITOR output
+ ip nhrp authentication cisco
+ ip nhrp map multicast dynamic
+ ip nhrp network-id 1
+ ip nhrp holdtime 600
+ ip nhrp redirect
+ ip nhrp nhs 10.0.100.94 nbma 172.16.94.4 multicast
+ ip tcp adjust-mss 1360
+ load-interval 30
+ delay 1000
+ tunnel source GigabitEthernet0/3
+ tunnel mode gre multipoint
+ tunnel key 100
+ tunnel vrf IWAN-TRANSPORT-1
+ tunnel protection ipsec profile DMVPN-PROFILE-1
+ domain IWAN path MPLS
+!
+!
+!
+!--------------------------------------------------------------------
+! INTERFACES
+!--------------------------------------------------------------------
+!
+interface GigabitEthernet0/0
+ description OOB Management
+ ip address 10.11.12.5 255.255.255.0
+ duplex auto
+ speed auto
+ media-type rj45
+!
+interface GigabitEthernet0/1
+ description to DIST
+ ip address 10.8.24.4 255.255.255.0
+ load-interval 30
+ duplex auto
+ speed auto
+ media-type rj45
+!
+interface GigabitEthernet0/2
+ description to BRPoPinet
+ description to R5
+ ip address 10.8.45.4 255.255.255.0
+ load-interval 30
+ duplex auto
+ speed auto
+ media-type rj45
+!
+interface GigabitEthernet0/3
+ description to MPLS
+ bandwidth 1000
+ vrf forwarding IWAN-TRANSPORT-1
+ ip address 172.16.84.4 255.255.255.0
+ load-interval 30
+ duplex auto
+ speed auto
+ media-type rj45
+!
+!
+!--------------------------------------------------------------------
+! IP route to build DMVPN Tunnel
+!--------------------------------------------------------------------
+!
+ip route vrf IWAN-TRANSPORT-1 0.0.0.0 0.0.0.0 172.16.84.8
+!
+!
+router eigrp IWAN-EIGRP
+ address-family ipv4 unicast autonomous-system 400
+   network 10.8.45.0 0.0.0.255
+   network 10.8.24.0 0.0.0.255
+   network 10.8.4.4 0.0.0.0
+   network 10.0.100.0 0.0.0.255
+!
+!--------------------------------------------------------------------
+! SNMP
+!--------------------------------------------------------------------
+!
+snmp-server community public RO
+snmp-server community private RW
+snmp-server ifindex persist
+!
+!
+!--------------------------------------------------------------------
+! ALIAS
+!--------------------------------------------------------------------
+!
+alias exec sri show run | inc
+alias exec srb show run | beg
+alias exec shflow sh flow monitor MONITOR-STATS cache format table
+alias exec delay ping 10.0.100.10 source 10.0.100.84
+!
+alias exec shm sh domain IWAN master
+alias exec shmtc show domain IWAN master traffic-classes
+alias exec shmtcs show domain IWAN master traffic-classes summ
+alias exec shmc show domain IWAN master channel | begin Id: 
+alias exec shb sh domain IWAN border 
+!
+!
+!
+ntp server 10.8.3.3
+!
+!
+!
+!
+no ip http server
+no ip http secure-server
+!
+!
+!
+control-plane
+!
+banner exec `
+**************************************************************************
+* IOSv - Cisco Systems Confidential                                      *
+*                                                                        *
+* This software is provided as is without warranty for internal          *
+* development and testing purposes only under the terms of the Cisco     *
+* Early Field Trial agreement.  Under no circumstances may this software *
+* be used for production purposes or deployed in a production            *
+* environment.                                                           *
+*                                                                        *
+* By using the software, you agree to abide by the terms and conditions  *
+* of the Cisco Early Field Trial Agreement as well as the terms and      *
+* conditions of the Cisco End User License Agreement at                  *
+* http://www.cisco.com/go/eula                                           *
+*                                                                        *
+* Unauthorized use or distribution of this software is expressly         *
+* Prohibited.                                                            *
+**************************************************************************`
+banner incoming `
+**************************************************************************
+* IOSv - Cisco Systems Confidential                                      *
+*                                                                        *
+* This software is provided as is without warranty for internal          *
+* development and testing purposes only under the terms of the Cisco     *
+* Early Field Trial agreement.  Under no circumstances may this software *
+* be used for production purposes or deployed in a production            *
+* environment.                                                           *
+*                                                                        *
+* By using the software, you agree to abide by the terms and conditions  *
+* of the Cisco Early Field Trial Agreement as well as the terms and      *
+* conditions of the Cisco End User License Agreement at                  *
+* http://www.cisco.com/go/eula                                           *
+*                                                                        *
+* Unauthorized use or distribution of this software is expressly         *
+* Prohibited.                                                            *
+**************************************************************************`
+banner login `
+**************************************************************************
+* IOSv - Cisco Systems Confidential                                      *
+*                                                                        *
+* This software is provided as is without warranty for internal          *
+* development and testing purposes only under the terms of the Cisco     *
+* Early Field Trial agreement.  Under no circumstances may this software *
+* be used for production purposes or deployed in a production            *
+* environment.                                                           *
+*                                                                        *
+* By using the software, you agree to abide by the terms and conditions  *
+* of the Cisco Early Field Trial Agreement as well as the terms and      *
+* conditions of the Cisco End User License Agreement at                  *
+* http://www.cisco.com/go/eula                                           *
+*                                                                        *
+* Unauthorized use or distribution of this software is expressly         *
+* Prohibited.                                                            *
+**************************************************************************`
+!
+line con 0
+ password cisco
+line aux 0
+!
+no scheduler allocate
+!
+end</entry>
+        </extensions>
+        <interface id="0" name="GigabitEthernet0/1" ipv4="10.0.0.50" netPrefixLenV4="30"/>
+        <interface id="1" name="GigabitEthernet0/2" ipv4="10.1.0.2" netPrefixLenV4="16"/>
+        <interface id="2" name="GigabitEthernet0/3" ipv4="10.0.0.58" netPrefixLenV4="30"/>
+    </node>
+    <node name="BRPoPinet" type="SIMPLE" subtype="IOSv" location="210,295" coordinate="45.79816953017265,-115.1806640625" vmImage="IOSv" vmFlavor="IOSv" ipv4="192.168.0.17">
+        <extensions>
+            <entry key="static_ip" type="String">172.16.1.13</entry>
+            <entry key="AutoNetkit.mgmt_ip" type="string"></entry>
+            <entry key="AutoNetkit.ASN" type="Integer">10</entry>
+            <entry key="AutoNetkit.ibgp_role" type="String">RR</entry>
+            <entry key="AutoNetkit.ospf_area" type="String">0</entry>
+            <entry key="Auto-generate config" type="Boolean">false</entry>
+            <entry key="config" type="String">!--------------------------------------------------------------------------------
+! IWAN POP BR connected to Internet
+! BRPoPinet
+!--------------------------------------------------------------------------------
+!
+hostname BRPoPinet
+!
+no aaa new-model
+clock timezone CET 1 0
+!
+no ip domain lookup
+ip cef
+ipv6 unicast-routing
+ipv6 cef
+!
+enable password cisco
+line vty 0 4
+ transport input ssh telnet
+ exec-timeout 720 0
+ password cisco
+ login
+
+ onep
+ transport type tls disable-remotecert-validation
+  start
+ service set vty
+!
+!------------------------------------------------------------
+! USERS
+!------------------------------------------------------------
+!
+username cisco privilege 15 secret 0 cisco
+!
+!
+!------------------------------------------------------------
+! FRONT VRF
+!------------------------------------------------------------
+!
+vrf definition IWAN-TRANSPORT-2
+ !
+ address-family ipv4
+ exit-address-family
+!
+!
+!------------------------------------------------------------
+! DOMAIN
+!------------------------------------------------------------
+!
+domain IWAN
+ vrf default
+  border
+   source-interface Loopback0
+   master 10.8.9.9
+!
+!
+!
+!
+!--------------------------------------------------------------------
+! LIVEACTION FLEXIBLE NETFLOW
+!--------------------------------------------------------------------
+!
+flow record LIVEACTION-FLOWRECORD
+ description DO NOT MODIFY. USED BY LIVEACTION.
+ match ipv4 tos
+ match ipv4 protocol
+ match ipv4 source address
+ match ipv4 destination address
+ match transport source-port
+ match transport destination-port
+ match interface input
+ match flow direction
+ collect routing source as
+ collect routing destination as
+ collect routing next-hop address ipv4
+ collect ipv4 dscp
+ collect ipv4 id
+ collect ipv4 source prefix
+ collect ipv4 source mask
+ collect ipv4 destination mask
+ collect transport tcp flags
+ collect interface output
+ collect flow sampler
+ collect counter bytes
+ collect counter packets
+ collect timestamp sys-uptime first
+ collect timestamp sys-uptime last
+ collect application name
+!
+flow exporter LIVEACTION-FLOWEXPORTER
+ description DO NOT MODIFY. USED BY LIVEACTION.
+ destination 10.151.1.95
+ source Loopback0
+ transport udp 2055
+ option interface-table
+ option application-table
+!
+flow monitor LIVEACTION-FLOWMONITOR
+ description DO NOT MODIFY. USED BY LIVEACTION.
+ exporter LIVEACTION-FLOWEXPORTER
+ cache timeout inactive 10
+ cache timeout active 60
+ record LIVEACTION-FLOWRECORD
+!
+!
+!------------------------------------------------------------
+! FLEXIBLE NETFLOW
+!------------------------------------------------------------
+!
+flow record RECORD-STATS
+ match ipv4 dscp
+ match ipv4 protocol
+ match ipv4 source address
+ match ipv4 destination address
+ match transport source-port
+ match transport destination-port
+ match interface input
+ match flow direction
+ collect routing next-hop address ipv4
+ collect counter bytes
+!
+!
+flow monitor MONITOR-STATS
+ cache timeout inactive 60
+ cache timeout active 60
+ cache timeout update 1
+ record RECORD-STATS
+!
+!
+!
+!------------------------------------------------------------
+! KEYRING
+! Use pre-share key here
+!------------------------------------------------------------
+!
+crypto ikev2 keyring DMVPN-KEYRING-2
+ peer ANY
+  address 0.0.0.0 0.0.0.0
+  pre-shared-key c1sco123
+ !
+!
+!
+!------------------------------------------------------------
+! IKEv2 PROFILE
+!------------------------------------------------------------
+!
+crypto ikev2 profile FVRF-IKEv2-IWAN-TRANSPORT-2
+ match fvrf IWAN-TRANSPORT-2
+ match identity remote address 0.0.0.0
+ authentication remote pre-share
+ authentication local pre-share
+ keyring local DMVPN-KEYRING-2
+!
+!
+!
+!------------------------------------------------------------
+! IPSEC
+!------------------------------------------------------------
+!
+! To avoid %CRYPTO-4-PKT_REPLAY_ERR
+crypto ipsec security-association replay disable
+crypto ipsec security-association replay window-size 512
+!
+!
+crypto ipsec transform-set AES256/SHA/TRANSPORT esp-aes 256 esp-sha-hmac
+ mode transport
+!
+crypto ipsec profile DMVPN-PROFILE-2
+ set transform-set AES256/SHA/TRANSPORT
+ set ikev2-profile FVRF-IKEv2-IWAN-TRANSPORT-2
+!
+!
+!
+!
+!
+!------------------------------------------------------------
+! LOOPBACK
+!------------------------------------------------------------
+!
+interface Loopback0
+ ip address 10.8.5.5 255.255.255.255
+!
+!
+!------------------------------------------------------------
+! DMVPN TUNNEL
+!------------------------------------------------------------
+!
+interface Tunnel200
+ bandwidth 1000
+ ip address 10.0.200.85 255.255.255.0
+ no ip redirects
+ ip mtu 1400
+ ip flow monitor MONITOR-STATS input
+ ip flow monitor MONITOR-STATS output
+ ip flow monitor LIVEACTION-FLOWMONITOR input
+ ip flow monitor LIVEACTION-FLOWMONITOR output
+ ip nhrp authentication cisco
+ ip nhrp map multicast dynamic
+ ip nhrp network-id 2
+ ip nhrp holdtime 600
+ !ip nhrp redirect
+ ip nhrp nhs 10.0.200.95 nbma 172.16.95.5 multicast
+ ip tcp adjust-mss 1360
+ load-interval 30
+ delay 1000
+ tunnel source GigabitEthernet0/3
+ tunnel mode gre multipoint
+ tunnel key 200
+ tunnel vrf IWAN-TRANSPORT-2
+ tunnel protection ipsec profile DMVPN-PROFILE-2
+ domain IWAN path INET
+!
+!
+!--------------------------------------------------------------------
+! INTERFACES
+!--------------------------------------------------------------------
+!
+interface GigabitEthernet0/0
+ description OOB Management
+ ip address 10.11.12.6 255.255.255.0
+ duplex auto
+ speed auto
+ media-type rj45
+!
+interface GigabitEthernet0/1
+ description -- Inter BR to BRPoPmpls --
+ ip address 10.8.45.5 255.255.255.0
+ load-interval 30
+ duplex auto
+ speed auto
+ media-type rj45
+!
+interface GigabitEthernet0/2
+ description to DIST
+ ip address 10.8.25.5 255.255.255.0
+ load-interval 30
+ duplex auto
+ speed auto
+ media-type rj45
+!
+interface GigabitEthernet0/3
+ description --INET--
+ bandwidth 1000
+ vrf forwarding IWAN-TRANSPORT-2
+ ip address 172.16.85.5 255.255.255.0
+ load-interval 30
+ duplex auto
+ speed auto
+ media-type rj45
+!
+!
+!
+!--------------------------------------------------------------------
+! IP route to build DMVPN Tunnel200
+!--------------------------------------------------------------------
+!
+ip route vrf IWAN-TRANSPORT-2 0.0.0.0 0.0.0.0 172.16.85.8
+!
+!
+!--------------------------------------------------------------------
+! EIGRP
+!--------------------------------------------------------------------
+!
+router eigrp IWAN-EIGRP
+ address-family ipv4 unicast autonomous-system 400
+   network 10.8.25.0 0.0.0.255
+   network 10.8.45.0 0.0.0.255
+   network 10.8.5.5 0.0.0.0
+   network 10.0.200.0 0.0.0.255
+!
+!--------------------------------------------------------------------
+! SNMP
+!--------------------------------------------------------------------
+!
+snmp-server community public RO
+snmp-server community private RW
+snmp-server ifindex persist
+!
+!
+!
+!--------------------------------------------------------------------
+! ALIAS
+!--------------------------------------------------------------------
+!
+alias exec sri show run | inc
+alias exec srb show run | beg
+alias exec shflow sh flow monitor MONITOR-STATS cache format table
+alias exec delay ping 10.0.200.10 source 10.0.200.85
+!
+alias exec shm sh domain IWAN master
+alias exec shmtc show domain IWAN master traffic-classes
+alias exec shmtcs show domain IWAN master traffic-classes summ
+alias exec shmc show domain IWAN master channel | begin Id: 
+alias exec shb sh domain IWAN border 
+!
+!
+ntp server 10.8.3.3
+!
+!
+!
+!
+control-plane
+!
+banner exec `
+**************************************************************************
+* IOSv - Cisco Systems Confidential                                      *
+*                                                                        *
+* This software is provided as is without warranty for internal          *
+* development and testing purposes only under the terms of the Cisco     *
+* Early Field Trial agreement.  Under no circumstances may this software *
+* be used for production purposes or deployed in a production            *
+* environment.                                                           *
+*                                                                        *
+* By using the software, you agree to abide by the terms and conditions  *
+* of the Cisco Early Field Trial Agreement as well as the terms and      *
+* conditions of the Cisco End User License Agreement at                  *
+* http://www.cisco.com/go/eula                                           *
+*                                                                        *
+* Unauthorized use or distribution of this software is expressly         *
+* Prohibited.                                                            *
+**************************************************************************`
+banner incoming `
+**************************************************************************
+* IOSv - Cisco Systems Confidential                                      *
+*                                                                        *
+* This software is provided as is without warranty for internal          *
+* development and testing purposes only under the terms of the Cisco     *
+* Early Field Trial agreement.  Under no circumstances may this software *
+* be used for production purposes or deployed in a production            *
+* environment.                                                           *
+*                                                                        *
+* By using the software, you agree to abide by the terms and conditions  *
+* of the Cisco Early Field Trial Agreement as well as the terms and      *
+* conditions of the Cisco End User License Agreement at                  *
+* http://www.cisco.com/go/eula                                           *
+*                                                                        *
+* Unauthorized use or distribution of this software is expressly         *
+* Prohibited.                                                            *
+**************************************************************************`
+banner login `
+**************************************************************************
+* IOSv - Cisco Systems Confidential                                      *
+*                                                                        *
+* This software is provided as is without warranty for internal          *
+* development and testing purposes only under the terms of the Cisco     *
+* Early Field Trial agreement.  Under no circumstances may this software *
+* be used for production purposes or deployed in a production            *
+* environment.                                                           *
+*                                                                        *
+* By using the software, you agree to abide by the terms and conditions  *
+* of the Cisco Early Field Trial Agreement as well as the terms and      *
+* conditions of the Cisco End User License Agreement at                  *
+* http://www.cisco.com/go/eula                                           *
+*                                                                        *
+* Unauthorized use or distribution of this software is expressly         *
+* Prohibited.                                                            *
+**************************************************************************`
+!
+line con 0
+ password cisco
+line aux 0
+line vty 0 4
+ exec-timeout 720 0
+ password cisco
+ login
+ transport input telnet ssh
+!
+no scheduler allocate
+!
+end</entry>
+        </extensions>
+        <interface id="0" name="GigabitEthernet0/1" ipv4="10.1.0.1" netPrefixLenV4="16"/>
+        <interface id="1" name="GigabitEthernet0/2" ipv4="10.0.0.54" netPrefixLenV4="30"/>
+        <interface id="2" name="GigabitEthernet0/3" ipv4="10.0.0.61" netPrefixLenV4="30"/>
+    </node>
+    <node name="MPLS" type="SIMPLE" subtype="IOSv" location="373,132" coordinate="50.56928286558241,-108.017578125" vmImage="IOSv" vmFlavor="IOSv" ipv4="192.168.0.11">
+        <extensions>
+            <entry key="static_ip" type="String">172.16.1.16</entry>
+            <entry key="AutoNetkit.mgmt_ip" type="string"></entry>
+            <entry key="AutoNetkit.ibgp_role" type="String">Disabled</entry>
+            <entry key="Auto-generate config" type="Boolean">false</entry>
+            <entry key="config" type="String">!------------------------------------------------------------
+! MPLS Core
+!------------------------------------------------------------
+!
+!
+service timestamps debug datetime msec
+service timestamps log datetime msec
+no service password-encryption
+!
+hostname MPLS
+!
+enable password cisco
+no aaa new-model
+!
+no ip domain lookup
+ip cef
+ipv6 unicast-routing
+ipv6 cef
+!
+!
+!
+!
+!------------------------------------------------------------
+! NETFLOW DEFINITION
+!------------------------------------------------------------
+!
+flow record RECORD-STATS
+ match ipv4 dscp
+ match ipv4 protocol
+ match ipv4 source address
+ match ipv4 destination address
+ match transport source-port
+ match transport destination-port
+ match interface input
+ match flow direction
+ collect routing vrf input
+ collect routing next-hop address ipv4
+ collect counter bytes
+!
+!
+flow monitor MONITOR-STATS
+ cache timeout inactive 60
+ cache timeout active 60
+ cache timeout update 1
+ record RECORD-STATS
+!
+!
+!
+!------------------------------------------------------------
+!
+interface Loopback0
+ description Loopback
+ ip address 192.168.0.11 255.255.255.255
+!
+interface GigabitEthernet0/0
+ description OOB Management
+ ip address 10.11.12.7 255.255.255.0
+ duplex auto
+ speed auto
+ media-type rj45
+!
+interface GigabitEthernet0/1
+ description to BRPoPmpls
+ ip address 172.16.84.8 255.255.255.0
+ ip flow monitor MONITOR-STATS input
+ ip flow monitor MONITOR-STATS output
+ duplex auto
+ speed auto
+ media-type rj45
+!
+interface GigabitEthernet0/2
+ description to MCBR
+ ip address 172.16.101.8 255.255.255.0
+ ip flow monitor MONITOR-STATS input
+ ip flow monitor MONITOR-STATS output
+ duplex auto
+ speed auto
+ media-type rj45
+!
+interface GigabitEthernet0/3
+ no ip address
+ shutdown
+!
+interface GigabitEthernet0/4
+ no ip address
+ shutdown
+!
+interface GigabitEthernet0/5
+ no ip address
+ shutdown
+!
+!
+!
+no ip http server
+no ip http secure-server
+!
+!
+!------------------------------------------------------------
+! ALIAS DEFINITION
+!------------------------------------------------------------
+!
+alias exec sri show run | inc
+alias exec srb show run | beg
+alias exec shflow sh flow monitor MONITOR-STATS cache format table
+!
+!
+!
+!
+!
+control-plane
+!
+banner exec `
+**************************************************************************
+* IOSv - Cisco Systems Confidential                                      *
+*                                                                        *
+* This software is provided as is without warranty for internal          *
+* development and testing purposes only under the terms of the Cisco     *
+* Early Field Trial agreement.  Under no circumstances may this software *
+* be used for production purposes or deployed in a production            *
+* environment.                                                           *
+*                                                                        *
+* By using the software, you agree to abide by the terms and conditions  *
+* of the Cisco Early Field Trial Agreement as well as the terms and      *
+* conditions of the Cisco End User License Agreement at                  *
+* http://www.cisco.com/go/eula                                           *
+*                                                                        *
+* Unauthorized use or distribution of this software is expressly         *
+* Prohibited.                                                            *
+**************************************************************************`
+banner incoming `
+**************************************************************************
+* IOSv - Cisco Systems Confidential                                      *
+*                                                                        *
+* This software is provided as is without warranty for internal          *
+* development and testing purposes only under the terms of the Cisco     *
+* Early Field Trial agreement.  Under no circumstances may this software *
+* be used for production purposes or deployed in a production            *
+* environment.                                                           *
+*                                                                        *
+* By using the software, you agree to abide by the terms and conditions  *
+* of the Cisco Early Field Trial Agreement as well as the terms and      *
+* conditions of the Cisco End User License Agreement at                  *
+* http://www.cisco.com/go/eula                                           *
+*                                                                        *
+* Unauthorized use or distribution of this software is expressly         *
+* Prohibited.                                                            *
+**************************************************************************`
+banner login `
+**************************************************************************
+* IOSv - Cisco Systems Confidential                                      *
+*                                                                        *
+* This software is provided as is without warranty for internal          *
+* development and testing purposes only under the terms of the Cisco     *
+* Early Field Trial agreement.  Under no circumstances may this software *
+* be used for production purposes or deployed in a production            *
+* environment.                                                           *
+*                                                                        *
+* By using the software, you agree to abide by the terms and conditions  *
+* of the Cisco Early Field Trial Agreement as well as the terms and      *
+* conditions of the Cisco End User License Agreement at                  *
+* http://www.cisco.com/go/eula                                           *
+*                                                                        *
+* Unauthorized use or distribution of this software is expressly         *
+* Prohibited.                                                            *
+**************************************************************************`
+!
+line con 0
+ password cisco
+line aux 0
+line vty 0 4
+ exec-timeout 720 0
+ password cisco
+ login
+ transport input telnet ssh
+!
+no scheduler allocate
+!
+end</entry>
+        </extensions>
+        <interface id="0" name="GigabitEthernet0/1" ipv4="10.0.0.57" netPrefixLenV4="30"/>
+        <interface id="1" name="GigabitEthernet0/2" ipv4="10.0.0.30" netPrefixLenV4="30"/>
+        <interface id="2" name="GigabitEthernet0/3" ipv4="10.0.0.18" netPrefixLenV4="30"/>
+        <interface id="3" name="GigabitEthernet0/4" ipv4="10.0.0.6" netPrefixLenV4="30"/>
+        <interface id="4" name="GigabitEthernet0/5" ipv4="10.0.128.1" netPrefixLenV4="30"/>
+    </node>
+    <node name="INET" type="SIMPLE" subtype="IOSv" location="369,295" coordinate="45.79816953017265,-108.193359375" vmImage="IOSv" vmFlavor="IOSv" ipv4="192.168.0.12">
+        <extensions>
+            <entry key="static_ip" type="String">172.16.1.15</entry>
+            <entry key="AutoNetkit.mgmt_ip" type="string"></entry>
+            <entry key="AutoNetkit.ibgp_role" type="String">Disabled</entry>
+            <entry key="Auto-generate config" type="Boolean">false</entry>
+            <entry key="config" type="String">!------------------------------------------------------------
+! INET Core
+!------------------------------------------------------------
+!
+!
+service timestamps debug datetime msec
+service timestamps log datetime msec
+no service password-encryption
+!
+hostname INET
+!
+!
+!
+enable password cisco
+!
+no aaa new-model
+no ip domain lookup
+ip cef
+ipv6 unicast-routing
+ipv6 cef
+!
+onep
+transport type tls disable-remotecert-validation
+ start
+service set vty
+!
+!
+!------------------------------------------------------------
+! FLEXIBLE NETFLOW
+!------------------------------------------------------------
+!
+flow record RECORD-STATS
+ match ipv4 dscp
+ match ipv4 protocol
+ match ipv4 source address
+ match ipv4 destination address
+ match transport source-port
+ match transport destination-port
+ match interface input
+ match flow direction
+ collect routing vrf input
+ collect routing next-hop address ipv4
+ collect counter bytes
+!
+!
+flow monitor MONITOR-STATS
+ cache timeout inactive 60
+ cache timeout active 60
+ cache timeout update 1
+ record RECORD-STATS
+!
+!
+!------------------------------------------------------------
+!
+interface Loopback0
+ description Loopback
+ ip address 192.168.0.12 255.255.255.255
+!
+interface GigabitEthernet0/0
+ description OOB Management
+ ip address 10.11.12.8 255.255.255.0
+ duplex auto
+ speed auto
+ media-type rj45
+!
+interface GigabitEthernet0/1
+ description to R85
+ ip address 172.16.85.8 255.255.255.0
+ ip flow monitor MONITOR-STATS input
+ ip flow monitor MONITOR-STATS output
+ duplex auto
+ speed auto
+ media-type rj45
+!
+interface GigabitEthernet0/2
+ description to R13
+ ip address 172.16.132.8 255.255.255.0
+ ip ospf cost 1
+ duplex auto
+ speed auto
+ media-type rj45
+!
+interface GigabitEthernet0/3
+ description to R10
+ ip address 172.16.102.8 255.255.255.0
+ ip ospf cost 1
+ duplex auto
+ speed auto
+ media-type rj45
+!
+interface GigabitEthernet0/4
+ description to R11
+ ip address 172.16.112.8 255.255.255.0
+ ip ospf cost 1
+ duplex auto
+ speed auto
+ media-type rj45
+!
+interface GigabitEthernet0/5
+ no ip address
+ shutdown
+!
+!
+no ip http server
+no ip http secure-server
+!
+!
+!------------------------------------------------------------
+! ALIAS 
+!------------------------------------------------------------
+!
+alias exec sri show run | inc
+alias exec srb show run | beg
+alias exec shflow sh flow monitor MONITOR-STATS cache format table
+!
+!
+!
+control-plane
+!
+banner exec `
+**************************************************************************
+* IOSv - Cisco Systems Confidential                                      *
+*                                                                        *
+* This software is provided as is without warranty for internal          *
+* development and testing purposes only under the terms of the Cisco     *
+* Early Field Trial agreement.  Under no circumstances may this software *
+* be used for production purposes or deployed in a production            *
+* environment.                                                           *
+*                                                                        *
+* By using the software, you agree to abide by the terms and conditions  *
+* of the Cisco Early Field Trial Agreement as well as the terms and      *
+* conditions of the Cisco End User License Agreement at                  *
+* http://www.cisco.com/go/eula                                           *
+*                                                                        *
+* Unauthorized use or distribution of this software is expressly         *
+* Prohibited.                                                            *
+**************************************************************************`
+banner incoming `
+**************************************************************************
+* IOSv - Cisco Systems Confidential                                      *
+*                                                                        *
+* This software is provided as is without warranty for internal          *
+* development and testing purposes only under the terms of the Cisco     *
+* Early Field Trial agreement.  Under no circumstances may this software *
+* be used for production purposes or deployed in a production            *
+* environment.                                                           *
+*                                                                        *
+* By using the software, you agree to abide by the terms and conditions  *
+* of the Cisco Early Field Trial Agreement as well as the terms and      *
+* conditions of the Cisco End User License Agreement at                  *
+* http://www.cisco.com/go/eula                                           *
+*                                                                        *
+* Unauthorized use or distribution of this software is expressly         *
+* Prohibited.                                                            *
+**************************************************************************`
+banner login `
+**************************************************************************
+* IOSv - Cisco Systems Confidential                                      *
+*                                                                        *
+* This software is provided as is without warranty for internal          *
+* development and testing purposes only under the terms of the Cisco     *
+* Early Field Trial agreement.  Under no circumstances may this software *
+* be used for production purposes or deployed in a production            *
+* environment.                                                           *
+*                                                                        *
+* By using the software, you agree to abide by the terms and conditions  *
+* of the Cisco Early Field Trial Agreement as well as the terms and      *
+* conditions of the Cisco End User License Agreement at                  *
+* http://www.cisco.com/go/eula                                           *
+*                                                                        *
+* Unauthorized use or distribution of this software is expressly         *
+* Prohibited.                                                            *
+**************************************************************************`
+!
+line con 0
+ password cisco
+line aux 0
+line vty 0 4
+ exec-timeout 720 0
+ password cisco
+ login
+ transport input telnet ssh
+!
+no scheduler allocate
+!
+end</entry>
+        </extensions>
+        <interface id="0" name="GigabitEthernet0/1" ipv4="10.0.0.62" netPrefixLenV4="30"/>
+        <interface id="1" name="GigabitEthernet0/2" ipv4="10.0.0.34" netPrefixLenV4="30"/>
+        <interface id="2" name="GigabitEthernet0/3" ipv4="10.0.0.22" netPrefixLenV4="30"/>
+        <interface id="3" name="GigabitEthernet0/4" ipv4="10.0.0.9" netPrefixLenV4="30"/>
+        <interface id="4" name="GigabitEthernet0/5" ipv4="10.0.128.5" netPrefixLenV4="30"/>
+    </node>
+    <node name="MCBRbranch" type="SIMPLE" subtype="IOSv" location="553,203" coordinate="42.553080288955805,-100.458984375" vmImage="IOSv" vmFlavor="IOSv" ipv4="192.168.0.13">
+        <extensions>
+            <entry key="static_ip" type="String">172.16.1.18</entry>
+            <entry key="AutoNetkit.mgmt_ip" type="string"></entry>
+            <entry key="Auto-generate config" type="Boolean">false</entry>
+            <entry key="config" type="String">!------------------------------------------------------------
+! SINGLE ROUTER BRANCH
+! MCBRbranch
+!------------------------------------------------------------
+!
+hostname MCBRbranch
+!
+no aaa new-model
+clock timezone CET 1 0
+no ip icmp rate-limit unreachable
+no ip domain lookup
+ip cef
+ipv6 unicast-routing
+ipv6 cef
+!
+enable password cisco
+!
+ onep
+ transport type tls disable-remotecert-validation
+  start
+ service set vty
+!
+!
+!------------------------------------------------------------
+! USERS
+!------------------------------------------------------------
+!
+username cisco privilege 15 secret 0 cisco
+!
+!
+!------------------------------------------------------------
+! DOMAIN
+!------------------------------------------------------------
+!
+domain IWAN
+ vrf default
+  border
+   source-interface Loopback0
+   master local 
+  master branch
+   source-interface Loopback0
+   hub 10.8.9.9
+!
+!
+!
+!------------------------------------------------------------
+! FRONT VRF
+!------------------------------------------------------------
+!
+vrf definition IWAN-TRANSPORT-1
+ !
+ address-family ipv4
+ exit-address-family
+!
+vrf definition IWAN-TRANSPORT-2
+ !
+ address-family ipv4
+ exit-address-family
+!
+!
+!
+!--------------------------------------------------------------------
+! LIVEACTION FLEXIBLE NETFLOW
+!--------------------------------------------------------------------
+!
+flow record LIVEACTION-FLOWRECORD
+ description DO NOT MODIFY. USED BY LIVEACTION.
+ match ipv4 tos
+ match ipv4 protocol
+ match ipv4 source address
+ match ipv4 destination address
+ match transport source-port
+ match transport destination-port
+ match interface input
+ match flow direction
+ collect routing source as
+ collect routing destination as
+ collect routing next-hop address ipv4
+ collect ipv4 dscp
+ collect ipv4 id
+ collect ipv4 source prefix
+ collect ipv4 source mask
+ collect ipv4 destination mask
+ collect transport tcp flags
+ collect interface output
+ collect flow sampler
+ collect counter bytes
+ collect counter packets
+ collect timestamp sys-uptime first
+ collect timestamp sys-uptime last
+ collect application name
+!
+flow exporter LIVEACTION-FLOWEXPORTER
+ description DO NOT MODIFY. USED BY LIVEACTION.
+ destination 10.151.1.95
+ source Loopback0
+ transport udp 2055
+ option interface-table
+ option application-table
+!
+flow monitor LIVEACTION-FLOWMONITOR
+ description DO NOT MODIFY. USED BY LIVEACTION.
+ exporter LIVEACTION-FLOWEXPORTER
+ cache timeout inactive 10
+ cache timeout active 60
+ record LIVEACTION-FLOWRECORD
+!
+!
+!------------------------------------------------------------
+! FLEXIBLE NETFLOW
+!------------------------------------------------------------
+!
+flow record RECORD-STATS
+ match ipv4 dscp
+ match ipv4 protocol
+ match ipv4 source address
+ match ipv4 destination address
+ match transport source-port
+ match transport destination-port
+ match interface input
+ match flow direction
+ collect routing next-hop address ipv4
+ collect counter bytes
+!
+!
+flow monitor MONITOR-STATS
+ cache timeout inactive 60
+ cache timeout active 60
+ cache timeout update 1
+ record RECORD-STATS
+!
+!
+!
+!
+!------------------------------------------------------------
+! QOS MARKING
+!------------------------------------------------------------
+!
+class-map match-all MARKING-CRITICAL
+ match access-group name MARKING-CRITICAL
+!
+policy-map MARKING
+ class MARKING-CRITICAL
+  set ip dscp af31
+!
+!
+!
+!
+!------------------------------------------------------------
+! KEYRING
+!------------------------------------------------------------
+!
+crypto ikev2 keyring DMVPN-KEYRING-1
+ peer ANY
+  address 0.0.0.0 0.0.0.0
+  pre-shared-key c1sco123
+ !
+!
+crypto ikev2 keyring DMVPN-KEYRING-2
+ peer ANY
+  address 0.0.0.0 0.0.0.0
+  pre-shared-key c1sco123
+ !
+!
+!
+!------------------------------------------------------------
+! IKEv2 PROPOSAL
+!
+! Removed IKEv2 proposal, will use smart default
+!------------------------------------------------------------
+!
+!
+!------------------------------------------------------------
+! IKEv2 PROFILE
+!------------------------------------------------------------
+!
+crypto ikev2 dpd 40 5 on-demand
+!
+crypto ikev2 profile FVRF-IKEv2-IWAN-TRANSPORT-1
+ match fvrf IWAN-TRANSPORT-1
+ match identity remote address 0.0.0.0
+ authentication remote pre-share
+ authentication local pre-share
+ keyring local DMVPN-KEYRING-1
+!
+crypto ikev2 profile FVRF-IKEv2-IWAN-TRANSPORT-2
+ match fvrf IWAN-TRANSPORT-2
+ match identity remote address 0.0.0.0
+ authentication remote pre-share
+ authentication local pre-share
+ keyring local DMVPN-KEYRING-2
+!
+!
+!------------------------------------------------------------
+! IPSEC
+!------------------------------------------------------------
+!
+! To avoid %CRYPTO-4-PKT_REPLAY_ERR
+crypto ipsec security-association replay disable
+crypto ipsec security-association replay window-size 512
+!
+!
+crypto ipsec transform-set AES256/SHA/TRANSPORT esp-aes 256 esp-sha-hmac
+ mode transport
+!
+crypto ipsec profile DMVPN-PROFILE-1
+ set transform-set AES256/SHA/TRANSPORT
+ set ikev2-profile FVRF-IKEv2-IWAN-TRANSPORT-1
+!
+crypto ipsec profile DMVPN-PROFILE-2
+ set transform-set AES256/SHA/TRANSPORT
+ set ikev2-profile FVRF-IKEv2-IWAN-TRANSPORT-2
+!
+!
+!
+!
+!------------------------------------------------------------
+! LOOPBACK
+!------------------------------------------------------------
+!
+interface Loopback0
+ ip address 10.2.10.10 255.255.255.255
+!
+!
+!
+!------------------------------------------------------------
+! DMVPN TUNNELS
+!------------------------------------------------------------
+!
+interface Tunnel100
+ description over MPLS
+ bandwidth 400
+ ip address 10.0.100.10 255.255.255.0
+ no ip redirects
+ ip mtu 1400
+ ip flow monitor MONITOR-STATS input
+ ip flow monitor MONITOR-STATS output
+ ip flow monitor LIVEACTION-FLOWMONITOR input
+ ip flow monitor LIVEACTION-FLOWMONITOR output
+ ip nhrp authentication cisco
+ ip nhrp network-id 1
+ ip nhrp holdtime 600
+ ip nhrp nhs 10.0.100.84 nbma 172.16.84.4 multicast 
+ ip nhrp nhs 10.0.100.94 nbma 172.16.94.4 multicast 
+ ip nhrp registration timeout 60
+ ip nhrp registration no-unique
+ ip nhrp shortcut
+ ip tcp adjust-mss 1360
+ if-state nhrp
+ delay 1000
+ tunnel source GigabitEthernet0/1
+ tunnel mode gre multipoint
+ tunnel key 100
+ tunnel vrf IWAN-TRANSPORT-1
+ tunnel protection ipsec profile DMVPN-PROFILE-1
+!
+interface Tunnel200
+ description over INET
+ bandwidth 400
+ ip address 10.0.200.10 255.255.255.0
+ no ip redirects
+ ip mtu 1400
+ ip flow monitor MONITOR-STATS input
+ ip flow monitor MONITOR-STATS output
+ ip flow monitor LIVEACTION-FLOWMONITOR input
+ ip flow monitor LIVEACTION-FLOWMONITOR output
+ ip nhrp authentication cisco
+ ip nhrp network-id 2
+ ip nhrp holdtime 600
+ ip nhrp nhs 10.0.200.85 nbma 172.16.85.5 multicast
+ ip nhrp nhs 10.0.200.95 nbma 172.16.95.5 multicast
+ ip nhrp registration timeout 60
+ ip nhrp registration no-unique
+ ip nhrp shortcut
+ ip tcp adjust-mss 1360
+ if-state nhrp
+ delay 1000
+ tunnel source GigabitEthernet0/2
+ tunnel mode gre multipoint
+ tunnel key 200
+ tunnel vrf IWAN-TRANSPORT-2
+ tunnel protection ipsec profile DMVPN-PROFILE-2
+!
+!
+!
+!------------------------------------------------------------
+! Secure Connectivity
+!------------------------------------------------------------
+ip access-list extended ACL-INET-PUBLIC
+ permit udp any any eq non500-isakmp
+ permit udp any any eq isakmp
+ permit esp any any
+ permit udp any any eq bootpc
+
+
+
+!------------------------------------------------------------
+! INTERFACES
+!------------------------------------------------------------
+!
+interface GigabitEthernet0/0
+ description OOB Management
+ ip address 10.11.12.9 255.255.255.0
+ duplex auto
+ speed auto
+ media-type rj45
+!
+interface GigabitEthernet0/1
+ description to MPLS
+ vrf forwarding IWAN-TRANSPORT-1
+ ip address 172.16.101.10 255.255.255.0
+ duplex auto
+ speed auto
+ media-type rj45
+!
+interface GigabitEthernet0/2
+ description to INET
+ vrf forwarding IWAN-TRANSPORT-2
+ ip address 172.16.102.10 255.255.255.0
+ ip access-group ACL-INET-PUBLIC in
+ duplex auto
+ speed auto
+ media-type rj45
+!
+interface GigabitEthernet0/3
+ description to CLNT
+ mac-address aabb.cc00.3a00
+ ip address 10.1.10.254 255.255.255.0
+ ip flow monitor MONITOR-STATS input
+ ip flow monitor MONITOR-STATS output
+ service-policy input MARKING
+ duplex auto
+ speed auto
+ media-type rj45
+!
+!
+!--------------------------------------------------------------------
+! IP ROUTE TO SETUP TUNNELS 
+!--------------------------------------------------------------------
+!
+ip route vrf IWAN-TRANSPORT-1 0.0.0.0 0.0.0.0 172.16.101.8
+ip route vrf IWAN-TRANSPORT-2 0.0.0.0 0.0.0.0 172.16.102.8
+!
+!
+!--------------------------------------------------------------------
+! EIGRP
+!--------------------------------------------------------------------
+!
+router eigrp IWAN-EIGRP
+ address-family ipv4 unicast autonomous-system 400
+   network 10.1.10.0 0.0.0.255
+   network 10.8.45.0 0.0.0.255
+   network 10.2.10.10 0.0.0.0
+   network 10.0.200.0 0.0.0.255
+   network 10.0.100.0 0.0.0.255
+!
+!
+!
+!--------------------------------------------------------------------
+! DSCP MARKING FOR CRITICAL APPS
+!--------------------------------------------------------------------
+!
+ip access-list extended MARKING-CRITICAL
+ permit tcp any any eq 7000
+!
+!
+route-map LOCAL-ONLY permit 10
+ match as-path 10
+!
+!
+!
+!--------------------------------------------------------------------
+! SNMP
+!--------------------------------------------------------------------
+!
+snmp-server community public RO
+snmp-server community private RW
+snmp-server ifindex persist
+!
+!
+!--------------------------------------------------------------------
+! ALIAS
+!--------------------------------------------------------------------
+!
+alias exec sri show run | inc
+alias exec srb show run | beg
+alias exec srs sh run | sec
+alias exec shflow sh flow monitor MONITOR-STATS cache format table
+alias exec shflow-rtp sh flow monitor MONITOR-STATS cache filter ipv4 protocol 17 format table
+!
+alias exec shm sh domain IWAN master 
+alias exec shmtc show domain IWAN master traffic-classes 
+alias exec shmtcs show domain IWAN master traffic-classes summ
+alias exec shmc show domain IWAN master channel | begin Id:  
+alias exec shb sh domain IWAN border 
+!
+!
+ntp server 10.8.3.3
+!
+!
+!
+!
+control-plane
+!
+banner exec `
+**************************************************************************
+* IOSv - Cisco Systems Confidential                                      *
+*                                                                        *
+* This software is provided as is without warranty for internal          *
+* development and testing purposes only under the terms of the Cisco     *
+* Early Field Trial agreement.  Under no circumstances may this software *
+* be used for production purposes or deployed in a production            *
+* environment.                                                           *
+*                                                                        *
+* By using the software, you agree to abide by the terms and conditions  *
+* of the Cisco Early Field Trial Agreement as well as the terms and      *
+* conditions of the Cisco End User License Agreement at                  *
+* http://www.cisco.com/go/eula                                           *
+*                                                                        *
+* Unauthorized use or distribution of this software is expressly         *
+* Prohibited.                                                            *
+**************************************************************************`
+banner incoming `
+**************************************************************************
+* IOSv - Cisco Systems Confidential                                      *
+*                                                                        *
+* This software is provided as is without warranty for internal          *
+* development and testing purposes only under the terms of the Cisco     *
+* Early Field Trial agreement.  Under no circumstances may this software *
+* be used for production purposes or deployed in a production            *
+* environment.                                                           *
+*                                                                        *
+* By using the software, you agree to abide by the terms and conditions  *
+* of the Cisco Early Field Trial Agreement as well as the terms and      *
+* conditions of the Cisco End User License Agreement at                  *
+* http://www.cisco.com/go/eula                                           *
+*                                                                        *
+* Unauthorized use or distribution of this software is expressly         *
+* Prohibited.                                                            *
+**************************************************************************`
+banner login `
+**************************************************************************
+* IOSv - Cisco Systems Confidential                                      *
+*                                                                        *
+* This software is provided as is without warranty for internal          *
+* development and testing purposes only under the terms of the Cisco     *
+* Early Field Trial agreement.  Under no circumstances may this software *
+* be used for production purposes or deployed in a production            *
+* environment.                                                           *
+*                                                                        *
+* By using the software, you agree to abide by the terms and conditions  *
+* of the Cisco Early Field Trial Agreement as well as the terms and      *
+* conditions of the Cisco End User License Agreement at                  *
+* http://www.cisco.com/go/eula                                           *
+*                                                                        *
+* Unauthorized use or distribution of this software is expressly         *
+* Prohibited.                                                            *
+**************************************************************************`
+!
+line con 0
+ password cisco
+line aux 0
+line vty 0 4
+ exec-timeout 720 0
+ password cisco
+ login
+ transport input telnet ssh
+!
+no scheduler allocate
+!
+end</entry>
+        </extensions>
+        <interface id="0" name="GigabitEthernet0/1" ipv4="10.0.128.2" netPrefixLenV4="30"/>
+        <interface id="1" name="GigabitEthernet0/2" ipv4="10.0.128.6" netPrefixLenV4="30"/>
+        <interface id="2" name="GigabitEthernet0/3" ipv4="10.0.0.41" netPrefixLenV4="30"/>
+    </node>
+    <node name="SRVR" type="SIMPLE" subtype="IOSv" location="55,291" vmImage="IOSv" vmFlavor="IOSv">
+        <extensions>
+            <entry key="static_ip" type="String">172.16.1.10</entry>
+            <entry key="Auto-generate config" type="Boolean">false</entry>
+            <entry key="config" type="String">!--------------------------------------------------------------------------------
+! SRVR
+! SERVER
+!--------------------------------------------------------------------------------
+!
+hostname SRVR
+!
+no aaa new-model
+clock timezone CET 1
+ip cef
+no ip domain lookup
+!
+enable password cisco
+!
+ onep
+ transport type tls disable-remotecert-validation
+  start
+ service set vty
+!
+!
+!------------------------------------------------------------
+! USERS
+!------------------------------------------------------------
+!
+username cisco privilege 15 secret 0 cisco
+ip host CLNT 10.1.10.1
+!
+!
+!
+!------------------------------------------------------------
+! LOOPBACKS
+!------------------------------------------------------------
+!
+interface Loopback11
+ ip address 10.8.101.1 255.255.255.0
+!
+interface Loopback12
+ ip address 10.8.102.1 255.255.255.0
+!
+interface Loopback13
+ ip address 10.8.103.1 255.255.255.0
+!
+interface Loopback14
+ ip address 10.8.104.1 255.255.255.0
+!
+!
+!--------------------------------------------------------------------
+! INTERFACES
+!--------------------------------------------------------------------
+!
+interface GigabitEthernet0/0
+ description OOB Management
+ ip address 10.11.12.99 255.255.255.0
+ duplex auto
+ speed auto
+ media-type rj45
+ no shutdown
+!
+interface GigabitEthernet0/1
+ description to DIST
+ mac-address aabb.cc00.2100
+ ip address 10.8.12.1 255.255.255.0
+ no shut
+!
+!
+!--------------------------------------------------------------------
+! EIGRP
+!--------------------------------------------------------------------
+!
+router eigrp IWAN-EIGRP
+ address-family ipv4 unicast autonomous-system 400
+   network 10.8.12.0 0.0.0.255
+   network 10.8.101.0 0.0.0.255
+   network 10.8.102.0 0.0.0.255
+   network 10.8.103.0 0.0.0.255
+   network 10.8.104.0 0.0.0.255
+!
+!--------------------------------------------------------------------
+!
+!
+!--------------------------------------------------------------------
+! SNMP
+!--------------------------------------------------------------------
+!
+snmp-server community public RO
+snmp-server community private RW
+snmp-server ifindex persist
+!
+!
+!
+!--------------------------------------------------------------------
+! ALIAS
+!--------------------------------------------------------------------
+!
+alias exec sri show run | inc
+alias exec srb show run | beg
+alias exec start-http httpse load-config unix:pagent-r81-httpse.cfg
+alias exec start-tgn tgn load-config unix:pagent-r81-tgn.cfg
+!
+!
+ntp server 10.8.3.3
+!
+!
+line con 0
+ exec-timeout 0 0
+ logging synchronous
+line aux 0
+line vty 0 4
+ transport input ssh telnet
+ exec-timeout 720 0
+ password cisco
+ login
+!
+end
+
+</entry>
+        </extensions>
+        <interface id="0" name="GigabitEthernet0/1"/>
+    </node>
+    <node name="CLNT" type="SIMPLE" subtype="IOSv" location="736,228" vmImage="IOSv" vmFlavor="IOSv">
+        <extensions>
+            <entry key="static_ip" type="String">172.16.1.19</entry>
+            <entry key="Auto-generate config" type="Boolean">false</entry>
+            <entry key="config" type="String">!--------------------------------------------------------------------------------
+! CLNT
+! CLIENT
+!--------------------------------------------------------------------------------
+!
+!
+hostname CLNT
+!
+no aaa new-model
+clock timezone CET 1
+!
+ip cef
+no ip domain lookup
+!
+enable password cisco
+line vty 0 4
+ transport input ssh telnet
+ exec-timeout 720 0
+ password cisco
+ login
+ !
+ onep
+ transport type tls disable-remotecert-validation
+  start
+ service set vty
+
+!
+!------------------------------------------------------------
+! USERS
+!------------------------------------------------------------
+!
+username cisco privilege 15 secret 0 cisco
+ip host SRVR 10.8.12.1
+!
+!
+!
+!
+!--------------------------------------------------------------------
+! INTERFACES
+!--------------------------------------------------------------------
+!
+interface GigabitEthernet0/0
+ description OOB Management
+ ip address 10.11.12.99 255.255.255.0
+ duplex auto
+ speed auto
+ media-type rj45
+ no shutdown
+!
+interface GigabitEthernet0/1
+ mac-address aabb.cc00.3b00
+ ip address 10.1.10.1 255.255.255.0
+ ip address 10.1.10.2 255.255.255.0 secondary
+ ip address 10.1.10.3 255.255.255.0 secondary
+ ip address 10.1.10.200 255.255.255.0 secondary
+ no shut
+!
+!
+!--------------------------------------------------------------------
+! DEFAULT ROUTE
+!--------------------------------------------------------------------
+!
+ip route 0.0.0.0 0.0.0.0 10.1.10.254
+!
+!
+!
+!
+!--------------------------------------------------------------------
+! SNMP
+!--------------------------------------------------------------------
+!
+snmp-server community public RO
+snmp-server community private RW
+snmp-server ifindex persist
+!
+!
+!
+!--------------------------------------------------------------------
+! ALIAS
+!--------------------------------------------------------------------
+!
+alias exec sri show run | inc
+alias exec srb show run | beg
+alias exec start-http httpse load-config unix:pagent-r20-httpse.cfg
+alias exec start-tgn tgn load-config unix:pagent-r20-tgn.cfg
+!
+!
+ntp server 10.8.3.3
+!
+!
+line con 0
+ exec-timeout 0 0
+ logging synchronous
+line aux 0
+!
+end
+</entry>
+        </extensions>
+        <interface id="0" name="GigabitEthernet0/1"/>
+        <interface id="1" name="GigabitEthernet0/2"/>
+        <interface id="2" name="GigabitEthernet0/3"/>
+    </node>
+    <node name="MCPoP" type="SIMPLE" subtype="IOSv" location="60,108" ipv4="192.168.0.8">
+        <extensions>
+            <entry key="static_ip" type="String">172.16.1.12</entry>
+            <entry key="config" type="String">!---------------------------------------------
+! MCPoP
+! Domaing Controller/Hub MC in IWAN POP
+!---------------------------------------------
+! 
+!
+service timestamps debug datetime msec
+service timestamps log datetime msec
+no service password-encryption
+!
+hostname MCPoP
+!
+!
+enable password cisco
+!
+no aaa new-model
+!
+!
+no ip domain lookup
+ip cef
+ipv6 unicast-routing
+ipv6 cef
+!
+line vty 0 4
+ transport input ssh telnet
+ exec-timeout 720 0
+ password cisco
+ login
+
+username cisco privilege 15 password 0 cisco
+ !
+ onep
+ transport type tls disable-remotecert-validation
+  start
+ service set vty
+!
+!
+!------------------------------------------------------------
+! DOMAIN
+!------------------------------------------------------------
+!
+domain IWAN
+ vrf default
+  master hub
+   source-interface Loopback0
+   enterprise-prefix  prefix-list PfR:ENTERPRISE_PREFIX
+   site-prefixes prefix-list PfR:DC1_PREFIX
+   monitor-interval 2 dscp ef
+   monitor-interval 2 dscp af41
+   monitor-interval 2 dscp cs4
+   monitor-interval 2 dscp af31
+   load-balance
+   collector 10.151.1.95 port 2055
+   class VOICE sequence 10
+    match dscp ef policy custom
+     priority 2 loss threshold 5
+     priority 1 one-way-delay threshold 150
+    path-preference MPLS fallback INET
+   class VIDEO sequence 20
+    match dscp af41 policy custom
+     priority 2 loss threshold 5
+     priority 1 one-way-delay threshold 150
+    match dscp cs4 policy custom
+     priority 2 loss threshold 5
+     priority 1 one-way-delay threshold 150
+    path-preference MPLS fallback INET
+   class CRITICAL sequence 30
+    match dscp af31 policy custom
+     priority 2 loss threshold 10
+     priority 1 one-way-delay threshold 600
+    path-preference MPLS fallback INET
+  !
+!
+ip prefix-list PfR:ENTERPRISE_PREFIX seq 10 permit 10.0.0.0/8
+ip prefix-list PfR:DC1_PREFIX seq 10 permit 10.8.0.0/16
+!
+!
+!--------------------------------------------------------------------
+! Interfaces
+!--------------------------------------------------------------------
+!
+interface Loopback0
+ ip address 10.8.9.9 255.255.255.255
+!
+interface GigabitEthernet0/0
+ description OOB Management
+ ip address 10.11.12.99 255.255.255.0
+ duplex auto
+ speed auto
+ media-type rj45
+!
+interface GigabitEthernet0/1
+ description to DIST
+ ip address 10.8.23.3 255.255.255.0
+ duplex auto
+ speed auto
+ media-type rj45
+!
+!
+!
+!--------------------------------------------------------------------
+! EIGRP
+!--------------------------------------------------------------------
+!
+router eigrp IWAN-EIGRP
+ address-family ipv4 unicast autonomous-system 400
+   network 10.8.23.0 0.0.0.255
+   network 10.8.9.9 0.0.0.0
+!
+!--------------------------------------------------------------------
+! ALIAS 
+!--------------------------------------------------------------------
+!
+alias exec sri show run | inc
+alias exec srb show run | beg
+!
+!
+!--------------------------------------------------------------------
+!
+ntp server 10.8.3.3
+!
+!
+!
+!
+!--------------------------------------------------------------------
+!
+snmp-server community public RO
+snmp-server community private RW
+!
+no ip http server
+no ip http secure-server
+!
+!
+!
+!
+control-plane
+!
+banner exec `
+**************************************************************************
+* IOSv - Cisco Systems Confidential                                      *
+*                                                                        *
+* This software is provided as is without warranty for internal          *
+* development and testing purposes only under the terms of the Cisco     *
+* Early Field Trial agreement.  Under no circumstances may this software *
+* be used for production purposes or deployed in a production            *
+* environment.                                                           *
+*                                                                        *
+* By using the software, you agree to abide by the terms and conditions  *
+* of the Cisco Early Field Trial Agreement as well as the terms and      *
+* conditions of the Cisco End User License Agreement at                  *
+* http://www.cisco.com/go/eula                                           *
+*                                                                        *
+* Unauthorized use or distribution of this software is expressly         *
+* Prohibited.                                                            *
+**************************************************************************`
+banner incoming `
+**************************************************************************
+* IOSv - Cisco Systems Confidential                                      *
+*                                                                        *
+* This software is provided as is without warranty for internal          *
+* development and testing purposes only under the terms of the Cisco     *
+* Early Field Trial agreement.  Under no circumstances may this software *
+* be used for production purposes or deployed in a production            *
+* environment.                                                           *
+*                                                                        *
+* By using the software, you agree to abide by the terms and conditions  *
+* of the Cisco Early Field Trial Agreement as well as the terms and      *
+* conditions of the Cisco End User License Agreement at                  *
+* http://www.cisco.com/go/eula                                           *
+*                                                                        *
+* Unauthorized use or distribution of this software is expressly         *
+* Prohibited.                                                            *
+**************************************************************************`
+banner login `
+**************************************************************************
+* IOSv - Cisco Systems Confidential                                      *
+*                                                                        *
+* This software is provided as is without warranty for internal          *
+* development and testing purposes only under the terms of the Cisco     *
+* Early Field Trial agreement.  Under no circumstances may this software *
+* be used for production purposes or deployed in a production            *
+* environment.                                                           *
+*                                                                        *
+* By using the software, you agree to abide by the terms and conditions  *
+* of the Cisco Early Field Trial Agreement as well as the terms and      *
+* conditions of the Cisco End User License Agreement at                  *
+* http://www.cisco.com/go/eula                                           *
+*                                                                        *
+* Unauthorized use or distribution of this software is expressly         *
+* Prohibited.                                                            *
+**************************************************************************`
+!
+line con 0
+ password cisco
+line aux 0
+!
+no scheduler allocate
+!
+end</entry>
+            <entry key="AutoNetkit.mgmt_ip" type="string"></entry>
+            <entry key="Auto-generate config" type="Boolean">false</entry>
+        </extensions>
+        <interface id="0" name="GigabitEthernet0/1" ipv4="10.0.128.1" netPrefixLenV4="30"/>
+    </node>
+    <connection dst="/virl:topology/virl:node[2]/virl:interface[1]" src="/virl:topology/virl:node[1]/virl:interface[2]"/>
+    <connection dst="/virl:topology/virl:node[3]/virl:interface[1]" src="/virl:topology/virl:node[2]/virl:interface[2]"/>
+    <connection dst="/virl:topology/virl:node[1]/virl:interface[3]" src="/virl:topology/virl:node[3]/virl:interface[2]"/>
+    <connection dst="/virl:topology/virl:node[4]/virl:interface[1]" src="/virl:topology/virl:node[2]/virl:interface[3]"/>
+    <connection dst="/virl:topology/virl:node[5]/virl:interface[1]" src="/virl:topology/virl:node[3]/virl:interface[3]"/>
+    <connection dst="/virl:topology/virl:node[7]/virl:interface[1]" src="/virl:topology/virl:node[1]/virl:interface[1]"/>
+    <connection dst="/virl:topology/virl:node[8]/virl:interface[1]" src="/virl:topology/virl:node[6]/virl:interface[3]"/>
+    <connection dst="/virl:topology/virl:node[6]/virl:interface[2]" src="/virl:topology/virl:node[5]/virl:interface[3]"/>
+    <connection dst="/virl:topology/virl:node[9]/virl:interface[1]" src="/virl:topology/virl:node[1]/virl:interface[4]"/>
+    <connection dst="/virl:topology/virl:node[6]/virl:interface[1]" src="/virl:topology/virl:node[4]/virl:interface[2]"/>
+</topology>
