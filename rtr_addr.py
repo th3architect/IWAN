@@ -8,17 +8,24 @@
 # * distribution, and is available at http://www.eclipse.org/legal/epl-v10.html
 # *
 
-# * python HelloNetwork.py -a 172.16.1.10
+# * Given a *.virl file print node names and addresses.  Assumes virl flat
+# * network configuration with static_ip for every node.
+
+# * python rtr_addr.py -f IWAN-SRBR-EIGRP.virl
 
 import logging
 import getopt
 import sys
+import os
+import subprocess
 import rtrlib
+from xml.dom import minidom
 
 logging.basicConfig(level=logging.WARNING)
 
+fn_virl = None
 element_address = None
-username = "cisco"
+username = None
 password = "cisco"
 
 def parse_command_line(args):
@@ -31,7 +38,7 @@ def parse_command_line(args):
     @return true if parsing the command line succeeds, false otherwise.
     """
     try:
-        opts, args = getopt.getopt(args[1:],"ha:u:p:n:",["address=","username=", "password=", "netapp=", "transport=", "rootcert=", "clientcert=", "key="])
+        opts, args = getopt.getopt(args[1:],"hf:u:p:n:",["file=","username=", "password=", "netapp=", "transport=", "rootcert=", "clientcert=", "key="])
     except getopt.GetoptError as err:
         print str(err)
         logger.info(get_usage())
@@ -47,9 +54,9 @@ def parse_command_line(args):
         if option == '-h':
             logger.info(get_usage())
             sys.exit()
-        elif option in ("-a", "--address"):
-            global element_address
-            element_address = arg
+        elif option in ("-f", "--file"):
+            global fn_virl
+            fn_virl = arg
         elif option in ("-u", "--username"):
             global username 
             username = arg
@@ -57,14 +64,14 @@ def parse_command_line(args):
             global password 
             password = arg
 
-    if(element_address==None):
+    if(fn_virl==None):
         logger.error(get_usage())
         return False
     
     return True
     
 def get_usage():
-        return " Usage: -a <address or FQDN> [-u <username> -p <password>]"
+        return " Usage: -f <virl filename *.virl>"
 
 if __name__=='__main__':
    logger = logging.getLogger('telnet')
@@ -72,15 +79,39 @@ if __name__=='__main__':
    if not parse_command_line(sys.argv):
       logger.error("Error in parsing arguments")
       sys.exit(1)
-   rtr = rtrlib.Rtr(element_address, password)
-   str = rtr.show_version()
-   print str
-   str = rtr.show_running()
-   print str
-   rtr.write_config("logging buffered 1000000\n")
-   str = rtr.show_running(" | i logging buffered")
-   print str
-   rtr.write_config("default logging buffered\n")
-   str = rtr.show_running(" | i logging buffered")
-   print str
+   
+#   print "this is the virl filename %s" % fn_virl
+
+   virldoc = minidom.parse(fn_virl)
+   nodelist = virldoc.getElementsByTagName('node')
+   invalid = None
+   for n in nodelist:
+       nodeName = n.attributes['name'].value
+       entries = n.getElementsByTagName('entry')       
+       for e in entries:
+           k = e.attributes['key'].value
+           t = e.attributes['type'].value
+           d = "none"
+           if (e.firstChild != None):
+               d = e.firstChild.data
+                   
+           if (k == 'static_ip'):
+               print('{0:20} {1:16}'.format(nodeName, d))
+           
+#           print username.__repr__()
+
+               if (username == 'all'):
+                   os.system("xterm -title {} -e telnet {} &".format(nodeName,
+                                                                     d))
+               elif (username == nodeName):
+                   os.system("xterm -title {} -e telnet {} &".format(nodeName,
+                                                                     d))
+                   break;
+               else:
+                   invalid = username
+                   break;
+#   if (invalid != None):
+#       logger.error("Invalide node name {}".format(invalid))
+           
+
    print "*********Finished"
