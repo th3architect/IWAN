@@ -25,6 +25,7 @@ logging.basicConfig(level=logging.WARNING)
 
 fn_virl = None
 element_address = None
+router = None
 username = None
 password = "cisco"
 
@@ -38,7 +39,7 @@ def parse_command_line(args):
     @return true if parsing the command line succeeds, false otherwise.
     """
     try:
-        opts, args = getopt.getopt(args[1:],"hf:u:p:n:",["file=","username=", "password=", "netapp=", "transport=", "rootcert=", "clientcert=", "key="])
+        opts, args = getopt.getopt(args[1:],"hf:r:p:",["file=","router==", "password="])
     except getopt.GetoptError as err:
         print str(err)
         logger.info(get_usage())
@@ -46,8 +47,7 @@ def parse_command_line(args):
     
     """
      * options:
-     *       -a, --address <network element address or FQDN>
-     *       -u, --username <name of user> must be privelege level 15
+     *       -r, --router <name of router> must be privelege level 15
      *       -p, --password <password of user>
     """     
     for option, arg in opts:
@@ -57,9 +57,9 @@ def parse_command_line(args):
         elif option in ("-f", "--file"):
             global fn_virl
             fn_virl = arg
-        elif option in ("-u", "--username"):
-            global username 
-            username = arg
+        elif option in ("-r", "--router"):
+            global router 
+            router = arg
         elif option in ("-p", "--password"):
             global password 
             password = arg
@@ -71,7 +71,7 @@ def parse_command_line(args):
     return True
     
 def get_usage():
-        return " Usage: -f <virl filename *.virl>"
+        return " Usage: -f <virl filename *.virl> [-r <router name>]"
 
 if __name__=='__main__':
    logger = logging.getLogger('telnet')
@@ -98,17 +98,17 @@ if __name__=='__main__':
            if (k == 'static_ip'):
                print('{0:20} {1:16}'.format(nodeName, d))
            
-#           print username.__repr__()
+#           print router.__repr__()
 
-               if (username == 'all'):
+               if (router == 'all'):
                    os.system("xterm -title {} -e telnet {} &".format(nodeName,
                                                                      d))
-               elif (username == nodeName):
+               elif (router == nodeName):
                    os.system("xterm -title {} -e telnet {} &".format(nodeName,
                                                                      d))
                    break;
                else:
-                   invalid = username
+                   invalid = router
                    break;
 #   if (invalid != None):
 #       logger.error("Invalide node name {}".format(invalid))
