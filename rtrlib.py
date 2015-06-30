@@ -10,39 +10,83 @@
 
 import telnetlib
 import StringIO
+import sys
 
 class Rtr:
 
-   def __init__(self, addr, password):
+   tn = None
+
+   def __init__(self, addr, password, port):
       self.mgmt_addr = addr
       self.password = password
+      self. port = port
+
+   def open(self):
+      if self.tn is None:
+         if (self.port > 1):
+            #  port exists, this is console access
+            print "console access"
+            try:
+               self.tn = telnetlib.Telnet(self.mgmt_addr, self.port, 5)
+            except:
+               print "telnet to console failed"
+               self.tn = None;
+         else:
+            raise Exception("vty access not implemented")
+            self.tn = None
+      else:
+         return self.tn
+
+   def close(self):
+      if self.tn is not None:
+         self.tn.close()
+         self.tn = None
 
    def enable_mode(self):
-      tn = telnetlib.Telnet(self.mgmt_addr)
-      tn.read_until("Password: ")
-      tn.write(self.password + "\n")
-      tn.read_until(">")
-      tn.write("enable\n")
-      tn.read_until("Password: ")
-      tn.write(self.password + "\n")
-      tn.read_until("#")
-      tn.write("terminal length 0\n")
-      tn.read_until("#")
-      return tn
+      if True:
+         self.tn.write("\n")
+#         tn.read_until(">",5)         
+#         tn.write("enable\n")
+#         tn.read_until("Password: ",5)
+#         tn.write(self.password + "\n")
+         print "waiting for #"
+         try:
+            self.tn.read_until("#", 5)
+         except EOFerror as e:
+            print "timed out"
+            sys.exit(1)
+            return None
+         self.tn.write("terminal length 0\n")
+         self.tn.read_until("#", 5)
+         return self.tn
+      else:
+         print "vty access"
+         # port does not exist, this is vty access
+         tn = telnetlib.Telnet(self.mgmt_addr)         
+         tn.read_until("Password: ")
+         tn.write(self.password + "\n")
+         tn.read_until(">")
+         tn.write("enable\n")
+         tn.read_until("Password: ")
+         tn.write(self.password + "\n")
+         tn.read_until("#")
+         tn.write("terminal length 0\n")
+         tn.read_until("#")
+         return tn
+      
+      return None
 
    def show_version(self,pipe=""):
       sess = self.enable_mode()
       sess.write("show version" + pipe +"\n")
       str = sess.read_until("#")
-      sess.close()
       return str
 
    def show_running(self, pipe=""):
       sess = self.enable_mode()
       sess.write("show running" + pipe + "\n")
       str = sess.read_until("#")
-      sess.close()
-      return str
+      return str      
 
 #  configStr must have \n for each line of config
    def write_config(self, config_str):

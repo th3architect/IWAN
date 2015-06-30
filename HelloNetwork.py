@@ -18,6 +18,7 @@ import rtrlib
 logging.basicConfig(level=logging.WARNING)
 
 element_address = None
+port = None
 username = "cisco"
 password = "cisco"
 
@@ -36,6 +37,29 @@ def parse_command_line(args):
         print str(err)
         logger.info(get_usage())
         sys.exit(2)
+        return False
+
+    print args
+    print opts
+
+    if (len(args) == 0):
+        logger.error(get_usage())
+        return False
+
+    if (len(args) > 2):
+        logger.error(get_usage())
+        return False
+
+    global element_address
+    element_address = args[0]
+
+    if (len(args) == 2):
+        global port
+        port = args[1]
+        
+    print element_address
+    print port
+
     
     """
      * options:
@@ -47,9 +71,6 @@ def parse_command_line(args):
         if option == '-h':
             logger.info(get_usage())
             sys.exit()
-        elif option in ("-a", "--address"):
-            global element_address
-            element_address = arg
         elif option in ("-u", "--username"):
             global username 
             username = arg
@@ -64,7 +85,7 @@ def parse_command_line(args):
     return True
     
 def get_usage():
-        return " Usage: -a <address or FQDN> [-u <username> -p <password>]"
+        return " Usage: [-u <username> -p <password>] host [port]"
 
 if __name__=='__main__':
    logger = logging.getLogger('telnet')
@@ -72,11 +93,17 @@ if __name__=='__main__':
    if not parse_command_line(sys.argv):
       logger.error("Error in parsing arguments")
       sys.exit(1)
-   rtr = rtrlib.Rtr(element_address, password)
+   
+   print element_address, password, port   
+   rtr = rtrlib.Rtr(element_address, password, port)
+   rtr.open()
    str = rtr.show_version()
    print str
    str = rtr.show_running()
    print str
+   rtr.close()
+   print "*********Finished"
+   sys.exit(0)
    rtr.write_config("logging buffered 1000000\n")
    str = rtr.show_running(" | i logging buffered")
    print str
