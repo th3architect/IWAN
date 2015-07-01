@@ -11,12 +11,16 @@
 import telnetlib
 import StringIO
 import sys
+import time
+import logging
 
 class Rtr:
 
    tn = None
 
    def __init__(self, addr, password, port):
+      self.logger = logging.getLogger('Router ' + addr)
+      self.logger.setLevel(logging.DEBUG)
       self.mgmt_addr = addr
       self.password = password
       self. port = port
@@ -29,12 +33,18 @@ class Rtr:
             try:
                self.tn = telnetlib.Telnet(self.mgmt_addr, self.port, 5)
             except:
-               print "telnet to console failed"
+               self.logger.error("telnet console failed\n")
                self.tn = None;
+               sys.exit(1)
          else:
-            raise Exception("vty access not implemented")
-            self.tn = None
+            try:
+               self.tn = telnetlib.Telnet(self.mgmt_addr)
+            except:
+               self.logger.error("telnet vty failed\n")
+               self.tn = None;
+               sys.exit(1)
       else:
+         self.logger.debug("Session exists: addr " + self.mgmt_addr)
          return self.tn
 
    def close(self):
@@ -42,9 +52,16 @@ class Rtr:
          self.tn.close()
          self.tn = None
 
+   def write(self, str):
+      if self.tn is not None:        
+         print "Writing " + str
+         self.tn.write(str)
+      else:
+         self.logger.error("No session")
+      
    def enable_mode(self):
       if True:
-         self.tn.write("\n")
+         self.write("\r\n")
 #         tn.read_until(">",5)         
 #         tn.write("enable\n")
 #         tn.read_until("Password: ",5)
@@ -56,8 +73,9 @@ class Rtr:
             print "timed out"
             sys.exit(1)
             return None
-         self.tn.write("terminal length 0\n")
-         self.tn.read_until("#", 5)
+         self.tn.write("terminal length 0\r\n")
+         str = self.tn.read_until("#", 5)
+         print "enable mode read until " + str
          return self.tn
       else:
          print "vty access"
@@ -78,13 +96,16 @@ class Rtr:
 
    def show_version(self,pipe=""):
       sess = self.enable_mode()
-      sess.write("show version" + pipe +"\n")
-      str = sess.read_until("#")
+      print "get show version"
+      sess.write("show version" + pipe +"\r\n")
+#      sess.write("show version" + pipe +"\n")
+#      sess.read_until("#")      
+      str = sess.read_eager()
       return str
 
    def show_running(self, pipe=""):
       sess = self.enable_mode()
-      sess.write("show running" + pipe + "\n")
+      self.write("show running" + pipe + "\n")
       str = sess.read_until("#")
       return str      
 
